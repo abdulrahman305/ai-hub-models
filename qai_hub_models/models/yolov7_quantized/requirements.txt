@@ -5,3 +5,6 @@ shapely==2.0.3
 fiftyone==1.0.1
 matplotlib==3.7.5 # Ultralytics does not specify a matplotlib verion, and the latest matplotlib breaks it. So we have to include the requirement manually
 ultralytics==8.0.193 # used by shared YOLO app
+fonttools>=4.43.0 # not directly required, pinned by Snyk to avoid a vulnerability
+numpy>=1.22.2 # not directly required, pinned by Snyk to avoid a vulnerability
+pillow>=10.3.0 # not directly required, pinned by Snyk to avoid a vulnerability
