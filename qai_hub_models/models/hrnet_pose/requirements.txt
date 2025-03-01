@@ -4,3 +4,6 @@ mmdet==3.3.0+mmcv220
 mmpose==1.2.0
 mmcv==2.2.0
 pycocotools==2.0.7
+fonttools>=4.43.0 # not directly required, pinned by Snyk to avoid a vulnerability
+numpy>=1.22.2 # not directly required, pinned by Snyk to avoid a vulnerability
+pillow>=10.3.0 # not directly required, pinned by Snyk to avoid a vulnerability
