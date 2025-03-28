@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 from collections import Counter
 from collections.abc import Iterable
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from typing import Any, Optional, TypeVar, Union
 
@@ -67,7 +68,9 @@ def print_inference_metrics(
             return f"{x:.4g}"
         return x
 
-    formatted_df = df_eval.applymap(custom_float_format)  # type: ignore
+    formatted_df = df_eval.applymap(
+        custom_float_format
+    )  # pyright: ignore[reportCallIssue]
 
     print(
         "\nComparing on-device vs. local-cpu inference"
@@ -103,7 +106,7 @@ def print_profile_metrics_from_job(
         runtime = TargetRuntime.TFLITE
     elif is_qnn_hub_model(profile_job.model):
         runtime = TargetRuntime.QNN
-    elif profile_job.model.model_type in [SourceModelType.ORT, SourceModelType.ONNX]:
+    elif profile_job.model.model_type == SourceModelType.ONNX:
         runtime = TargetRuntime.ONNX
     else:
         raise NotImplementedError()
@@ -333,3 +336,11 @@ def print_file_tree_changes(
         print(line)
 
     return outlines
+
+
+@contextmanager
+def suppress_stdout():
+    """A context manager that redirects stdout to devnull"""
+    with open(os.devnull, "w") as fnull:
+        with redirect_stdout(fnull) as out:
+            yield out

@@ -25,7 +25,7 @@ NUM_LAYERS_PER_SPLIT = 9
 
 # Hugging face repo name and url
 HF_REPO_NAME = "meta-llama/Meta-Llama-3-8B-Instruct"
-HF_REPO_URL = f"https://huggingface.co/meta-llama/{HF_REPO_NAME}"
+HF_REPO_URL = f"https://huggingface.co/{HF_REPO_NAME}"
 
 # Minimum memory (RAM+swap) recommended for export.
 MIN_MEMORY_RECOMMENDED = 80
@@ -34,14 +34,14 @@ MIN_MEMORY_RECOMMENDED = 80
 class Llama3_Quantized(Llama3Base_Quantized):
     def __init__(self, huggingface_model_name: str = HF_REPO_NAME, *args, **kwargs):
         super().__init__(
-            huggingface_model_name=huggingface_model_name,  # type: ignore
+            huggingface_model_name=huggingface_model_name,  # type: ignore[misc]
             min_memory_recommended=MIN_MEMORY_RECOMMENDED,
             *args,
             **kwargs,
         )
 
     @classmethod
-    def from_pretrained(  # type: ignore
+    def from_pretrained(
         cls,
         sequence_length: int = DEFAULT_SEQUENCE_LENGTH,
         context_length: int = DEFAULT_CONTEXT_LENGTH,

@@ -5,12 +5,14 @@
 from __future__ import annotations
 
 import datetime
+import time
 from functools import cached_property
 from typing import Any, Generic, Optional, TypeVar, Union, cast
 
 import qai_hub as hub
 from qai_hub.public_rest_api import DatasetEntries
 
+from qai_hub_models.models.common import Precision
 from qai_hub_models.scorecard import (
     ScorecardCompilePath,
     ScorecardDevice,
@@ -20,11 +22,11 @@ from qai_hub_models.scorecard import (
 JobTypeVar = TypeVar(
     "JobTypeVar", hub.ProfileJob, hub.InferenceJob, hub.CompileJob, hub.QuantizeJob
 )
-ScorecardPathTypeVar = TypeVar(
-    "ScorecardPathTypeVar", ScorecardCompilePath, ScorecardProfilePath
+ScorecardPathOrNoneTypeVar = TypeVar(
+    "ScorecardPathOrNoneTypeVar", ScorecardCompilePath, ScorecardProfilePath, None
 )
 
-# Specific typevar. Autofill has trouble resolving types for nested generics without specifically listing ineritors of the generic base.
+# Specific typevar. Autofill has trouble resolving types for nested generics without specifically listing inheritors of the generic base.
 ScorecardJobTypeVar = TypeVar(
     "ScorecardJobTypeVar",
     "QuantizeScorecardJob",
@@ -34,24 +36,28 @@ ScorecardJobTypeVar = TypeVar(
 )
 
 
-class ScorecardJob(Generic[JobTypeVar, ScorecardPathTypeVar]):
+class ScorecardJob(Generic[JobTypeVar, ScorecardPathOrNoneTypeVar]):
     job_type_class: type[JobTypeVar]
 
     def __init__(
         self,
         model_id: str,
+        precision: Precision,
         job_id: Optional[str],
         device: ScorecardDevice,
         wait_for_job: bool,  # If false, running jobs are treated like they were "skipped".
-        wait_job_secs: Optional[int],  # None == any number of seconds
-        path: ScorecardPathTypeVar,
+        wait_for_max_job_duration: Optional[
+            int
+        ],  # Allow the job this many seconds after creation to complete
+        path: ScorecardPathOrNoneTypeVar,
     ):
         self.model_id = model_id
+        self.precision = precision
         self.job_id = job_id
         self._device = device
         self.wait_for_job = wait_for_job
-        self.wait_job_secs = wait_job_secs
-        self.path: ScorecardPathTypeVar = path
+        self.wait_for_max_job_duration = wait_for_max_job_duration
+        self.path: ScorecardPathOrNoneTypeVar = path
         self.__post_init__()
 
     def __post_init__(self):
@@ -79,7 +85,15 @@ class ScorecardJob(Generic[JobTypeVar, ScorecardPathTypeVar]):
             if not self.wait_for_job:
                 return job
             else:
-                job.wait(self.wait_job_secs)
+                if self.wait_for_max_job_duration:
+                    time_left = int(
+                        job.date.timestamp()
+                        + self.wait_for_max_job_duration
+                        - time.time()
+                    )
+                    job.wait(time_left)
+                else:
+                    job.wait()
         return job
 
     @cached_property
@@ -140,16 +154,6 @@ class ScorecardJob(Generic[JobTypeVar, ScorecardPathTypeVar]):
         raise ValueError("No chipset found.")
 
     @cached_property
-    def quantized(self) -> str:
-        """Quantized models are marked so precision can be correctly recorded."""
-        return (
-            "Yes"
-            if self.model_id.endswith("quantized")
-            or self.model_id.endswith("quantizable")
-            else "No"
-        )
-
-    @cached_property
     def date(self) -> Optional[datetime.datetime]:
         if self.job is None:
             return None
@@ -176,7 +180,9 @@ class ProfileScorecardJob(ScorecardJob[hub.ProfileJob, ScorecardProfilePath]):
     def profile_results(self) -> dict[str, Any]:
         """Profile results from profile job."""
         if self.success:
-            return self.job.download_profile()
+            profile = self.job.download_profile()
+            assert isinstance(profile, dict)
+            return profile
         raise ValueError("Can't get profile results if job did not succeed.")
 
     @cached_property
@@ -254,16 +260,18 @@ class ProfileScorecardJob(ScorecardJob[hub.ProfileJob, ScorecardProfilePath]):
         return dict(min=0, max=0)
 
     @cached_property
-    def precision(self) -> str:
+    def precision_str(self) -> str:
         """Get the precision of the model based on the run."""
-        if self.success:
+        if self.success and self.precision == Precision.float:
+            # Backwards compatibility with old perf yaml
             compute_unit = self.primary_compute_unit
-            if compute_unit == "CPU":
-                return "fp32"
-            if self.quantized == "Yes":
-                return "int8"
-            return "fp16"
-        return "null"
+            return "fp32" if compute_unit == "CPU" else "fp16"
+
+        if self.precision == Precision.w8a8:
+            # Backwards compatibility with old perf yaml
+            return "int8"
+
+        return str(self.precision)
 
     @cached_property
     def performance_metrics(self) -> dict[str, Any]:
@@ -272,7 +280,7 @@ class ProfileScorecardJob(ScorecardJob[hub.ProfileJob, ScorecardProfilePath]):
             throughput=self.throughput,
             estimated_peak_memory_range=self.peak_memory_range,
             primary_compute_unit=self.primary_compute_unit,
-            precision=self.precision,
+            precision=self.precision_str,
             layer_info=dict(
                 layers_on_npu=self.npu,
                 layers_on_gpu=self.gpu,

@@ -67,10 +67,10 @@ class FootTrackDataset(BaseDataset):
         for label in labels_gt:
             boxes.append(
                 [
-                    label[1] * self.scale_width,
-                    label[2] * self.scale_height,
-                    label[3] * self.scale_width,
-                    label[4] * self.scale_height,
+                    label[1],
+                    label[2],
+                    label[3],
+                    label[4],
                 ]
             )
             labels.append(label[0])
@@ -91,8 +91,10 @@ class FootTrackDataset(BaseDataset):
             boxes = F.pad(boxes, (0, 0, 0, self.max_boxes - num_boxes), value=0)
             labels = F.pad(labels, (0, self.max_boxes - num_boxes), value=0)
 
+        image_id = abs(hash(str(image_path.name[:-4]))) % (10**8)
+
         return image_tensor, (
-            str(image_path.name[:-4]),
+            image_id,
             self.img_height,
             self.img_width,
             boxes,

@@ -5,11 +5,11 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from qai_hub_models.models.common import TargetRuntime
+from qai_hub_models.models.common import Precision, TargetRuntime
 from qai_hub_models.utils.base_config import BaseQAIHMConfig
 from qai_hub_models.utils.default_export_device import DEFAULT_EXPORT_DEVICE
 from qai_hub_models.utils.path_helpers import QAIHM_MODELS_ROOT
@@ -23,6 +23,13 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
 
     # Whether the model is quantized with aimet.
     is_aimet: bool = False
+
+    # The list of precisions that:
+    # - Are enabled via the CLI
+    # - Scorecard runs by default each week for accuracy & performance tests
+    supported_precisions: list[Precision] = field(
+        default_factory=lambda: [Precision.float]
+    )
 
     # aimet model can additionally specify num calibration samples to speed up
     # compilation
@@ -40,7 +47,7 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
     # This field is managed automatically by the scorecard, and should
     # not be manually edited after a model is first added. If the model
     # begins to work again, this will be removed automatically by scorecard.
-    qnn_export_failure_reason: str = ""
+    qnn_scorecard_failure: str = ""
 
     # If the model should be disabled for qnn for any reason other than
     # a job failure, this should explain why,
@@ -61,14 +68,13 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
     # This field is managed automatically by the scorecard, and should
     # not be manually edited after a model is first added. If the model
     # begins to work again, this will be removed automatically by scorecard.
-    tflite_export_failure_reason: str = ""
+    tflite_scorecard_failure: str = ""
 
     # If the model should be disabled for tflite for any reason other than
     # a job failure, this should explain why.
     #
     # This requires a filed issue because it isn't auto-removed
     # when a model begins to work again.
-
     tflite_export_disable_issue: str = ""
 
     # If the model doesn't work on onnx, this should explain why,
@@ -77,7 +83,7 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
     # This field is managed automatically by the scorecard, and should
     # not be manually edited after a model is first added. If the model
     # begins to work again, this will be removed automatically by scorecard.
-    onnx_export_failure_reason: str = ""
+    onnx_scorecard_failure: str = ""
 
     # If the model should be disabled for onnx for any reason other than
     # a job failure, this should explain why.
@@ -163,11 +169,6 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
     # on a full dataset. Datasets specified here must be chosen from `qai_hub_models/datasets`.
     eval_datasets: Optional[list[str]] = None
 
-    # If set, quantizes the model using AI Hub quantize job. This also requires setting
-    # the `eval_datasets` field. Calibration data will be pulled from the first item
-    # in `eval_datasets`.
-    use_hub_quantization: bool = False
-
     # By default inference tests are done using 8gen1 chipset to avoid overloading
     # newer devices. Some models don't work on 8gen1, so use 8gen3 for those.
     inference_on_8gen3: bool = False
@@ -197,12 +198,15 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
         """
         Return the reason a model failed or None if the model did not fail.
         """
+        if not any(runtime.supports_precision(p) for p in self.supported_precisions):
+            return "Runtime does not support any precisions supported by this model"
+
         if runtime == TargetRuntime.PRECOMPILED_QNN_ONNX:
             runtime = (
                 TargetRuntime.QNN
             )  # QNN Support is a proxy for precompiled QNN ONNX.
         automated_skip = getattr(
-            self, f"{runtime.name.lower()}_export_failure_reason", None
+            self, f"{runtime.name.lower()}_scorecard_failure", None
         )
         user_provided_skip = getattr(
             self, f"{runtime.name.lower()}_export_disable_issue", None
@@ -212,16 +216,56 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
 
     @classmethod
     def from_model(cls: type[QAIHMModelCodeGen], model_id: str) -> QAIHMModelCodeGen:
-        code_gen_path = QAIHM_MODELS_ROOT / model_id / "code-gen.yaml"
-        if not os.path.exists(code_gen_path):
+        model_folder = QAIHM_MODELS_ROOT / model_id
+        if not os.path.exists(model_folder):
             raise ValueError(f"{model_id} does not exist")
-        return cls.from_yaml(code_gen_path)
+
+        code_gen_path = model_folder / "code-gen.yaml"
+        if not os.path.exists(code_gen_path):
+            out = QAIHMModelCodeGen()
+        else:
+            out = cls.from_yaml(code_gen_path)
+
+        # This is a hack so we don't have to populate all of the legacy quantized models' code gen configs
+        # with the quantization type.
+        #
+        # TODO(#13765): remove this hack when we remove the quantized model folders
+        if "_quantized" in model_id:
+            if (
+                len(out.supported_precisions) == 1
+                and out.supported_precisions[0] == Precision.float
+            ):
+                if model_id.endswith("w8a16_quantized"):
+                    out.supported_precisions = [Precision.w8a16]
+                elif model_id.endswith("_quantized"):
+                    out.supported_precisions = [Precision.w8a8]
+
+        return out
+
+    @property
+    def has_components(self) -> bool:
+        return bool(self.components)
+
+    @property
+    def can_use_quantize_job(self) -> bool:
+        """
+        Whether the model can be quantized via quantize job.
+        This may return true even if the model does list support for non-float precisions.
+        """
+        return not self.is_precompiled and not self.is_aimet and not self.has_components
+
+    @property
+    def supports_quantization(self) -> bool:
+        return any(x != Precision.float for x in self.supported_precisions)
 
     def validate(self) -> Optional[str]:
-        if self.is_aimet and self.use_hub_quantization:
-            return "Flags is_aimet and use_hub_quantization cannot both be set."
-        if self.use_hub_quantization and not self.eval_datasets:
-            return "Must set eval_datasets if use_hub_quantization is set."
+        if (
+            not self.is_precompiled
+            and not self.is_aimet
+            and self.supports_quantization
+            and not self.eval_datasets
+        ):
+            return "Must set eval_datasets if Hub quantization is supported"
         if (
             self.python_version_greater_than_or_equal_to is None
             and self.python_version_greater_than_or_equal_to_reason is not None
@@ -260,7 +304,7 @@ class QAIHMModelCodeGen(BaseQAIHMConfig):
                 (timeout_field_name, timeout),
             ):
                 if field_val and issue_link not in field_val:
-                    return f"{field_name} must include a full link to an issue (expected format: `{issue_link}/1234` )"
+                    return f"{field_name} must include a full link to an issue (expected format: `{issue_link}1234` )"
 
         return None
 
