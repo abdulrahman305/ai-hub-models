@@ -6,7 +6,7 @@
 # THIS FILE WAS AUTO-GENERATED. DO NOT EDIT MANUALLY.
 
 Deprecated==1.2.11
-Pillow>10,<12
+Pillow>10.3.0
 adbutils>=2.8.0
 aimet-torch[v1-deps]==2.1.0; sys_platform == "linux" and python_version == "3.10"
 albumentations==0.5.2
@@ -43,7 +43,7 @@ matplotlib==3.7.5
 mypy==1.13.0
 numpy>=1.23.5,< 2
 object-detection-metrics==0.4.post1
-onnx>=1.14.1,<1.17
+onnx>=1.17.0
 onnxruntime>=1.15.1
 onnxsim<=0.4.36
 openai-whisper==20231117
@@ -99,3 +99,6 @@ wheel==0.44.0
 xtcocotools==1.14.3
 yacs==0.1.8
 xhtml2pdf>=0.2.17 # not directly required, pinned by Snyk to avoid a vulnerability
+fonttools>=4.43.0 # not directly required, pinned by Snyk to avoid a vulnerability
+setuptools>=70.0.0 # not directly required, pinned by Snyk to avoid a vulnerability
+zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
