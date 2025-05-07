@@ -4,3 +4,4 @@ mmdet==3.3.0+mmcv220
 mmpose==1.2.0
 mmcv==2.2.0
 xtcocotools==1.14.3
+setuptools>=78.1.1 # not directly required, pinned by Snyk to avoid a vulnerability
