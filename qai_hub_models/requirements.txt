@@ -20,3 +20,4 @@ qai_hub>=0.22.0
 datasets==2.14.5
 ruamel-yaml==0.18.10
 filelock>=3.16.1
+requests>=2.32.4 # not directly required, pinned by Snyk to avoid a vulnerability
