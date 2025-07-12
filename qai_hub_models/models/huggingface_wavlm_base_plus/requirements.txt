@@ -1,3 +1,4 @@
 transformers==4.41.1
 soundfile==0.12.1
 librosa==0.10.1
+urllib3>=2.5.0 # not directly required, pinned by Snyk to avoid a vulnerability
