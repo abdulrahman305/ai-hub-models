@@ -2,3 +2,4 @@ chumpy==0.71
 mmdet==3.3.0+mmcv220
 mmpose==1.2.0
 mmcv==2.2.0
+torch>=2.8.0 # not directly required, pinned by Snyk to avoid a vulnerability
