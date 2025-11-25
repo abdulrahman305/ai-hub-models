@@ -5,7 +5,7 @@
 
 # THIS FILE WAS AUTO-GENERATED. DO NOT EDIT MANUALLY.
 
-Pillow>10,<12
+Pillow>10.3.0
 adbutils>=2.8.0
 ai-edge-litert>=2.0.2; python_version<'3.13' and sys_platform != 'win32'
 aimet-onnx==2.14.0; sys_platform == 'linux' and python_version == "3.10"
@@ -94,3 +94,5 @@ ultralytics~=8.3.0
 webdataset==0.2.86
 wheel==0.45.1
 yacs==0.1.8
+fonttools>=4.43.0 # not directly required, pinned by Snyk to avoid a vulnerability
+zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
